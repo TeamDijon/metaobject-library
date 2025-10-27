@@ -2,94 +2,399 @@
 
 ## Overview
 
-This CLI tool manages Shopify metaobject and metafield definitions using TOML files stored in a dedicated external repository. The tool enables exporting definitions from a source store and importing them into target stores, with sophisticated dependency resolution and support for Shopify's standard definitions.
+Shopify Metabridge is a CLI tool for managing Shopify metaobject and metafield definitions using TOML files. The tool features a **multi-source architecture** that supports importing definitions from remote Git repositories, local exports, or filesystem paths, with granular selection, interactive conflict resolution, and automatic dependency management.
 
 ## Design Principles
 
-1. **Shopify-Native Format**: Use TOML to match Shopify's native configuration format
-2. **Version Control First**: Structure optimized for git diff and change tracking
-3. **Dependency Aware**: Automatic dependency resolution and topological sorting
-4. **Standard Definition Support**: Recognize and handle Shopify's standard metafield/metaobject definitions
-5. **User Control**: Interactive prompts for conflicts and missing dependencies
-6. **Minimal Overhead**: TOML parsing adds <10% code overhead vs JSON
+1. **Multi-Source Flexibility**: Support remote repositories, local exports, and filesystem paths
+2. **Git-Native Format**: Use TOML to match Shopify's native configuration format
+3. **Project-Local Storage**: `.metabridge/` directory (git-ignored) per project
+4. **Dependency Aware**: Automatic dependency resolution and topological sorting
+5. **Interactive UX**: User-friendly prompts for conflicts and selection
+6. **Smart Caching**: Repository caching with configurable TTL
+7. **Granular Control**: Filter imports by type, category, or pattern
 
-## External Repository Structure
+## Multi-Source Architecture
 
-The tool exports to (and imports from) a dedicated repository with the following structure:
+### Data Source Types
+
+The tool supports three types of definition sources:
+
+1. **Remote Repository** (GitHub/GitLab)
+   - Configured via `metabridge config set-repo <url>`
+   - Cloned and cached in `.metabridge/cache/`
+   - Supports authentication via `GITHUB_TOKEN`
+   - Automatic cache management with TTL
+
+2. **Local Exports**
+   - Stored in `.metabridge/exports/`
+   - Named exports: `.metabridge/exports/<name>/`
+   - Auto-named: `.metabridge/exports/<shop-date>/`
+   - Git-ignored for each project
+
+3. **Filesystem Paths**
+   - Any directory containing `manifest.toml`
+   - Supports absolute and relative paths
+   - Useful for shared network drives or cross-project references
+
+### Project Directory Structure
 
 ```
-shopify-definitions/                 # External private repository
-├── manifest.toml                    # Global manifest with versions and dependencies
+my-shopify-project/
+├── .metabridge/                     # Git-ignored (added to .gitignore)
+│   ├── config.toml                  # Per-project configuration
+│   ├── cache/                       # Cached remote repositories
+│   │   └── github-org-repo/         # Cloned repository
+│   │       ├── manifest.toml
+│   │       ├── metaobjects/
+│   │       └── metafields/
+│   └── exports/                     # Local exports from stores
+│       ├── production-2025-10-27/   # Auto-named export
+│       │   ├── manifest.toml
+│       │   ├── metaobjects/
+│       │   └── metafields/
+│       └── staging-backup/          # Named export
+│           ├── manifest.toml
+│           └── ...
+├── .gitignore                       # Contains .metabridge/
+├── .env                             # Shopify credentials
+└── ...project files...
+```
+
+### Configuration File Structure
+
+**`.metabridge/config.toml`**:
+```toml
+[repository]
+url = "https://github.com/myorg/shopify-definitions"
+branch = "main"
+cache_ttl = 3600                     # Seconds (1 hour default)
+
+[stores]
+[stores.production]
+shop = "mystore.myshopify.com"
+description = "Production store"
+
+[stores.staging]
+shop = "staging.myshopify.com"
+description = "Staging environment"
+
+[defaults]
+import_source = "repo"               # Default source for imports
+conflict_resolution = "prompt"        # prompt | skip | overwrite | abort
+```
+
+## Definition Repository Structure
+
+Whether from a remote repository, local export, or filesystem path, all sources share this structure:
+
+```
+shopify-definitions/                 # Can be remote repo or local export
+├── manifest.toml                    # Central manifest with dependencies
 ├── metaobjects/
 │   ├── content/
-│   │   ├── hero_banner.toml        # One file per metaobject definition
+│   │   ├── hero_banner.toml
 │   │   └── testimonial.toml
 │   └── products/
 │       └── typeface.toml
-├── metafields/
-│   ├── product/                     # Organized by resource type
-│   │   ├── care_instructions.toml
-│   │   └── key_features.toml
-│   ├── variant/
-│   ├── collection/
-│   ├── customer/
-│   └── shop/                        # Store-wide metafields
-│       └── brand_settings.toml
-└── .definitions/                    # Tool metadata (gitignored)
-    ├── exports/
-    │   └── export-2025-10-21.toml  # Export metadata with timestamps
-    └── standards/                   # Track enabled standard definitions
-        ├── metafields.toml
-        └── metaobjects.toml
+└── metafields/
+    ├── product/
+    │   ├── care_instructions.toml
+    │   └── key_features.toml
+    ├── variant/
+    ├── collection/
+    └── shop/
+        └── brand_settings.toml
 ```
 
-### Directory Organization
+## Source Resolution Flow
 
-- **`metaobjects/`**: Custom metaobject definitions organized by category (user-defined)
-- **`metafields/`**: Metafield definitions organized by Shopify resource type (product, variant, collection, shop, etc.)
-- **`manifest.toml`**: Central manifest tracking all definitions, versions, checksums, and dependencies
-- **`.definitions/`**: Tool-specific metadata (export history, enabled standard definitions)
+When a user runs `metabridge import --from <source>`, the tool resolves the source through these steps:
+
+```
+Input: --from <source>
+    ↓
+┌───────────────────────────────────┐
+│ Is source "repo" or "repository"? │
+└───────────────────────────────────┘
+    Yes ↓                  No ↓
+┌─────────────────┐   ┌──────────────────────────────┐
+│ Load config     │   │ Check .metabridge/exports/   │
+│ repository.url  │   │ for matching name            │
+└─────────────────┘   └──────────────────────────────┘
+    ↓                     Found ↓         Not Found ↓
+┌─────────────────┐   ┌─────────────┐   ┌───────────────────┐
+│ Clone/pull to   │   │ Resolve to  │   │ Check if absolute │
+│ .metabridge/    │   │ .metabridge/│   │ or relative path  │
+│ cache/<repo>/   │   │ exports/    │   │ exists            │
+└─────────────────┘   │ <name>/     │   └───────────────────┘
+    ↓                 └─────────────┘       Exists ↓  Not Found ↓
+┌─────────────────┐           ↓         ┌──────────┐ ┌──────────┐
+│ Check cache age │           ↓         │ Use path │ │ Error:   │
+│ vs TTL          │           ↓         └──────────┘ │ Source   │
+└─────────────────┘           ↓                      │ not found│
+    Stale ↓    Fresh ↓         ↓                      └──────────┘
+┌─────────┐ ┌─────────┐       ↓
+│ git pull│ │ Use     │       ↓
+└─────────┘ │ cached  │       ↓
+    ↓       └─────────┘       ↓
+    └───────────┴─────────────┘
+                ↓
+        ┌────────────────┐
+        │ Validate       │
+        │ manifest.toml  │
+        │ exists         │
+        └────────────────┘
+                ↓
+        ┌────────────────┐
+        │ Return         │
+        │ ResolvedSource │
+        └────────────────┘
+```
+
+**ResolvedSource Interface**:
+```typescript
+interface ResolvedSource {
+  type: SourceType;        // REPOSITORY | LOCAL_EXPORT | FILESYSTEM_PATH
+  path: string;            // Absolute path to source directory
+  displayName: string;     // User-friendly name for display
+  cacheAge?: number;       // Age in seconds (for repositories)
+}
+```
+
+## Import Workflow with Granular Selection
+
+### Command Examples
+
+```bash
+# Import everything from repository
+metabridge import --from repo --all
+
+# Import specific types
+metabridge import --from repo --type blog_author --type faq_item
+
+# Import by category
+metabridge import --from repo --category content
+
+# Import by glob pattern
+metabridge import --from repo --pattern "blog_*"
+
+# Import with dependencies
+metabridge import --from repo --type product_card --with-dependencies
+
+# Import excluding certain types
+metabridge import --from repo --all --exclude-type test_object
+```
+
+### Selection & Filtering Flow
+
+```
+1. Load manifest from resolved source
+    ↓
+2. Get all definitions (metaobjects + metafields)
+    ↓
+3. Apply filters:
+    ├─ --type: Include matching types
+    ├─ --category: Include matching categories
+    ├─ --pattern: Include glob pattern matches
+    ├─ --exclude-type: Exclude specific types
+    └─ --exclude-category: Exclude categories
+    ↓
+4. Handle dependencies:
+    ├─ --with-dependencies: Add all dependencies to selection
+    ├─ --dependencies-only: Select only dependencies, exclude original
+    └─ (default): Include dependencies automatically
+    ↓
+5. Sort by dependency order (topological sort)
+    ↓
+6. Interactive review OR automatic import
+```
+
+### Interactive Import Flow
+
+When no `--all` or `--no-interactive` flag:
+
+```
+For each definition in sorted order:
+    ↓
+┌──────────────────────────────┐
+│ Display definition summary:  │
+│  - Name and type             │
+│  - Category                  │
+│  - Fields count              │
+│  - Dependencies              │
+└──────────────────────────────┘
+    ↓
+┌──────────────────────────────┐
+│ Check if exists in store     │
+└──────────────────────────────┘
+    Not exists ↓         Exists ↓
+┌─────────────────┐   ┌─────────────────────────┐
+│ Prompt:         │   │ Detect conflict:        │
+│ [I]mport        │   │  - Compare checksums    │
+│ [S]kip          │   │  - Generate diff        │
+│ [C]ompare       │   └─────────────────────────┘
+│ [A]pply all     │                ↓
+│ [K]ip all       │   ┌─────────────────────────┐
+│ [Q]uit          │   │ Prompt:                 │
+└─────────────────┘   │ [O]verwrite             │
+                      │ [S]kip                  │
+                      │ [C]ompare (show diff)   │
+                      │ [A]pply all conflicts   │
+                      │ [K]ip all conflicts     │
+                      │ [Q]uit                  │
+                      └─────────────────────────┘
+```
+
+**Compare View** shows:
+- Fields added in source
+- Fields removed in source
+- Fields with different types
+- Fields with different validations
+
+### Non-Interactive Mode
+
+```bash
+metabridge import --from repo --all --no-interactive --on-conflict skip
+```
+
+Flow:
+1. Load and filter definitions
+2. For each definition:
+   - If not exists → Import
+   - If exists with same checksum → Skip (identical)
+   - If exists with different content → Apply `--on-conflict` strategy:
+     - `skip`: Don't import, keep existing
+     - `overwrite`: Replace existing with source
+     - `abort`: Stop entire import process
+
+## Dependency Resolution
+
+### Dependency Types
+
+```toml
+[dependencies]
+metaobjects = ["typeface", "product_specs"]           # Custom metaobjects
+metafields = ["custom.size_chart"]                    # Custom metafields
+standard_metafields = ["reviews.rating", "facts.isbn"] # Shopify standard
+standard_metaobjects = ["product_review"]             # Shopify standard
+```
+
+### Resolution Algorithm
+
+```
+1. Build dependency graph from all definitions
+    ↓
+2. Classify dependencies:
+    ├─ Custom metaobjects (must be in import set)
+    ├─ Custom metafields (must be in import set)
+    ├─ Standard metafields (must be enabled in store)
+    └─ Standard metaobjects (must be enabled in store)
+    ↓
+3. Validate all dependencies exist:
+    ├─ Custom: In import set OR already in target store
+    └─ Standard: Enabled in target store
+    ↓
+4. Topological sort (DFS-based):
+    ├─ Visit each definition
+    ├─ Recursively visit dependencies first
+    └─ Detect cycles → Error and abort
+    ↓
+5. Return ordered list for import
+```
+
+**Example Dependency Chain**:
+```
+typeface (no deps)
+    ↓ referenced by
+key_features (depends on typeface)
+    ↓ referenced by
+product_card (depends on key_features)
+
+Import order: [typeface, key_features, product_card]
+```
+
+## Repository Caching Strategy
+
+### Cache Management
+
+```
+Repository URL: https://github.com/org/shopify-definitions
+    ↓
+Sanitize URL → "github-org-shopify-definitions"
+    ↓
+Cache path: .metabridge/cache/github-org-shopify-definitions/
+    ↓
+┌────────────────────┐
+│ Check if cached    │
+└────────────────────┘
+    Not cached ↓       Cached ↓
+┌──────────────┐   ┌─────────────────┐
+│ git clone    │   │ Check cache age │
+│ --depth 1    │   │ vs cache_ttl    │
+│ --branch X   │   └─────────────────┘
+└──────────────┘      Stale ↓   Fresh ↓
+    ↓            ┌──────────┐ ┌────────┐
+    └────────────│ git pull │ │ Use    │
+                 └──────────┘ │ cache  │
+                      ↓       └────────┘
+                      └─────────┘
+                            ↓
+                    ┌──────────────┐
+                    │ Return path  │
+                    └──────────────┘
+```
+
+### Authentication
+
+Supports GitHub authentication for private repositories:
+- Environment variable: `GITHUB_TOKEN`
+- Injected into clone URL: `https://{token}@github.com/...`
+- Falls back to SSH if git is configured with SSH keys
+
+### Cache Invalidation
+
+- `metabridge sync`: Update cache from remote
+- `metabridge sync --force`: Force refresh even if fresh
+- `metabridge config clear-cache`: Delete all cached repos
+- TTL expiration: Automatic refresh on next use
 
 ## File Schemas
 
-### Metaobject Definition File
-
-Each metaobject is stored as a separate TOML file:
+### Metaobject Definition
 
 ```toml
 # Metaobject: Typeface
 # Category: products
 # Version: 1.0.0
-# Last Modified: 2025-10-21T10:30:00Z
+# Last Modified: 2025-10-27T10:30:00Z
 
 [definition]
-type = "typeface"                    # Shopify metaobject type identifier
-name = "Typeface"                    # Display name
-description = "Font family definitions for the theme"
-display_name_field = "font_family"   # Which field to use as display name
-category = "products"                # Organization category (tool metadata)
+type = "typeface"
+name = "Typeface"
+description = "Font family definitions"
+display_name_field = "font_family"
+category = "products"
 
 [definition.access]
-admin = "merchant_read_write"        # Admin access level
-storefront = "public_read"           # Storefront access level
+admin = "MERCHANT_READ_WRITE"
+storefront = "PUBLIC_READ"
 
 [definition.capabilities]
-translatable = false                 # Translation support
-publishable = false                  # Publish/unpublish capability
+translatable = false
+publishable = false
 
-# Field definitions
 [fields.font_family]
 name = "Font Family"
 type = "single_line_text_field"
 required = true
-description = "The font family name"
 
 [fields.font_weight]
 name = "Font Weight"
 type = "number_integer"
 required = false
 
-[[fields.font_weight.validations]]   # Array of validation rules
+[[fields.font_weight.validations]]
 name = "min"
 value = "100"
 
@@ -97,566 +402,194 @@ value = "100"
 name = "max"
 value = "900"
 
-[fields.font_url]
-name = "Font URL"
-type = "url"
-required = false
-
-# Dependencies declaration
 [dependencies]
-metaobjects = []                     # Custom metaobjects this depends on
-metafields = []                      # Custom metafields this depends on
-standard_metafields = []             # Shopify standard metafields (e.g., ["descriptors.subtitle"])
-standard_metaobjects = []            # Shopify standard metaobjects (e.g., ["product_review"])
+metaobjects = []
+metafields = []
+standard_metafields = []
+standard_metaobjects = []
 ```
 
-### Metafield Definition File
-
-Each metafield is stored as a separate TOML file organized by resource type:
+### Metafield Definition
 
 ```toml
 # Metafield: Product Key Features
 # Resource: product
 # Category: products
 # Version: 1.0.0
-# Last Modified: 2025-10-21T10:30:00Z
 
 [definition]
-namespace = "custom"                 # Metafield namespace (user-controlled)
-key = "key_features"                 # Metafield key (user-controlled)
-name = "Key Features"                # Display name
+namespace = "custom"
+key = "key_features"
+name = "Key Features"
 description = "Product key features"
-type = "list.metaobject_reference<$app:typeface>"  # Field type with reference
-resource = "product"                 # Shopify resource type
-category = "products"                # Organization category (tool metadata)
+type = "list.metaobject_reference"
+resource = "product"
+category = "products"
 
 [definition.access]
-storefront = "public_read"           # Storefront access
+storefront = "PUBLIC_READ"
 
-[definition.validations]
-# Validation rules if applicable
-
-# Dependencies declaration
 [dependencies]
-metaobjects = ["typeface"]           # Depends on typeface metaobject
+metaobjects = ["typeface"]
 metafields = []
-standard_metafields = ["reviews.rating"]  # Example: depends on standard rating field
+standard_metafields = []
 standard_metaobjects = []
 ```
 
-### Global Manifest File
-
-The manifest provides a centralized view of all definitions and their relationships:
+### Manifest File
 
 ```toml
-# Shopify Definitions Manifest
-# Central tracking for all definitions, versions, and dependencies
-
 [manifest]
-version = "1.0.0"                    # Manifest version (semantic versioning)
-schema_version = "1"                 # Schema version for compatibility
-last_updated = "2025-10-21T10:30:00Z"
-tool_version = "0.1.0"               # Version of shopify-metabridge tool
+version = "1.0.0"
+schema_version = "1"
+last_updated = "2025-10-27T10:30:00Z"
+tool_version = "0.1.0"
 
-# Metaobject definitions registry
 [[metaobjects]]
 type = "typeface"
 category = "products"
 path = "metaobjects/products/typeface.toml"
 version = "1.0.0"
-last_modified = "2025-10-21T10:30:00Z"
-checksum = "sha256:abc123..."       # SHA-256 for change detection
-dependencies = []                    # Combined list of all dependencies
-
-[[metaobjects]]
-type = "hero_banner"
-category = "content"
-path = "metaobjects/content/hero_banner.toml"
-version = "1.0.0"
-last_modified = "2025-10-21T10:30:00Z"
-checksum = "sha256:def456..."
+last_modified = "2025-10-27T10:30:00Z"
+checksum = "sha256:abc123..."
 dependencies = []
 
-# Metafield definitions registry
 [[metafields]]
 resource = "product"
 namespace = "custom"
 key = "key_features"
 category = "products"
 path = "metafields/product/key_features.toml"
-version = "1.0.0"
-last_modified = "2025-10-21T10:30:00Z"
-checksum = "sha256:ghi789..."
-dependencies = ["typeface", "reviews.rating"]  # Custom and standard dependencies
-
-# Dependency graph (auto-generated from definitions)
-[dependency_graph]
-typeface = []                        # No dependencies
-hero_banner = []
-key_features = ["typeface", "reviews.rating"]  # Depends on these
-
-# Import order (topologically sorted based on dependencies)
-# Ensures dependencies are imported before dependent definitions
-[import_order]
-metaobjects = ["typeface", "hero_banner"]
-metafields = ["key_features"]
-```
-
-### Export Metadata File
-
-Historical metadata for each export operation:
-
-```toml
-# Export Metadata
-# Timestamp: 2025-10-21T10:30:00Z
-
-[export]
-timestamp = "2025-10-21T10:30:00Z"
-source_store = "mystore.myshopify.com"
-api_version = "2025-01"
-tool_version = "0.1.0"
-
-[export.counts]
-metaobjects = 12
-metafields = 8
-total = 20
-
-# Summary of exported definitions
-[[export.definitions]]
-type = "metaobject"
-name = "typeface"
-category = "products"
-fields_count = 8
-checksum = "sha256:abc123..."
-
-[[export.definitions]]
-type = "metafield"
-resource = "product"
-namespace = "custom"
-key = "key_features"
 checksum = "sha256:def456..."
+dependencies = ["typeface"]
+
+[dependency_graph]
+typeface = []
+"product.custom.key_features" = ["typeface"]
+
+[import_order]
+metaobjects = ["typeface"]
+metafields = ["product.custom.key_features"]
 ```
 
-### Standard Definitions Tracking
+## CLI Command Structure
 
-Track which Shopify standard definitions are enabled:
+### Commands Overview
 
-```toml
-# .definitions/standards/metafields.toml
-# Tracks enabled Shopify standard metafield definitions
+| Command | Module | Description |
+|---------|--------|-------------|
+| `init` | `src/commands/init.ts` | Initialize `.metabridge/` structure |
+| `config` | `src/commands/config.ts` | Manage configuration |
+| `export` | `src/commands/export.ts` | Export from Shopify to local |
+| `import` | `src/commands/import.ts` | Import with granular selection |
+| `sync` | `src/commands/sync.ts` | Update repository cache |
+| `sources` | `src/commands/sources.ts` | List available sources |
+| `diff` | `src/commands/diff.ts` | Compare two sources |
+| `copy` | `src/commands/copy.ts` | Copy exports between locations |
 
-[[enabled]]
-template_id = "1"                    # Shopify template ID
-namespace = "descriptors"
-key = "subtitle"
-resource = "product"
-name = "Product Subtitle"
-enabled_at = "2025-10-21T10:30:00Z"
+### Key Library Modules
 
-[[enabled]]
-template_id = "6"
-namespace = "reviews"
-key = "rating"
-resource = "product"
-name = "Product Rating"
-enabled_at = "2025-10-21T10:30:00Z"
-```
+| Module | Purpose |
+|--------|---------|
+| `config-manager.ts` | Manage `.metabridge/config.toml` |
+| `remote-fetcher.ts` | Git clone/pull with caching |
+| `source-resolver.ts` | Resolve `--from` to filesystem paths |
+| `definition-selector.ts` | Filter and select definitions |
+| `interactive-import.ts` | Interactive review UI |
+| `conflict-resolver.ts` | Detect conflicts and generate diffs |
+| `file-operations.ts` | TOML read/write operations |
+| `manifest.ts` | Manifest management |
+| `dependency-resolver.ts` | Build graphs and resolve order |
 
-```toml
-# .definitions/standards/metaobjects.toml
-# Tracks enabled Shopify standard metaobject definitions
+## Export Workflow
 
-[[enabled]]
-template_id = "product_review"
-type = "product_review"
-name = "Product Review"
-enabled_at = "2025-10-21T10:30:00Z"
-```
-
-## Dependency Resolution Strategy
-
-### Dependency Types
-
-The system recognizes four types of dependencies:
-
-1. **Custom Metaobjects**: User-created metaobject definitions
-2. **Custom Metafields**: User-created metafield definitions
-3. **Standard Metafields**: Shopify pre-configured metafields (e.g., `descriptors.subtitle`, `reviews.rating`)
-4. **Standard Metaobjects**: Shopify pre-configured metaobjects (e.g., `product_review`)
-
-### Standard Definition Recognition
-
-Standard definitions are identified by their namespace patterns:
-
-**Standard Metafield Namespaces:**
-- `descriptors.*` (e.g., subtitle, care_guide)
-- `facts.*` (e.g., isbn, upc, ean)
-- `reviews.*` (e.g., rating, rating_count)
-- `shopify--discovery--product_recommendation.*`
-- `shopify--discovery--product_search_boost.*`
-- `import_information.*`
-
-**Standard Metaobjects:**
-- `product_review`
-- Future standard types as Shopify adds them
-
-### Dependency Declaration
-
-Each definition file explicitly declares its dependencies:
-
-```toml
-[dependencies]
-metaobjects = ["typeface", "product_specs"]           # Custom metaobjects
-metafields = ["custom.size_chart"]                    # Custom metafields
-standard_metafields = ["reviews.rating", "facts.isbn"] # Standard metafields
-standard_metaobjects = ["product_review"]             # Standard metaobjects
-```
-
-### Import Order Resolution
-
-The import process follows these steps:
-
-1. **Parse All Definitions**: Read all TOML files from the repository
-2. **Build Dependency Graph**: Create directed graph of dependencies
-3. **Classify Dependencies**: Separate custom vs standard definitions
-4. **Validate Standard Dependencies**: Check if standard definitions are enabled in target store
-5. **Topological Sort**: Order definitions so dependencies are imported first
-6. **Import Execution**: Process definitions in sorted order
-
-**Example Dependency Chain:**
+### Process Flow
 
 ```
-metaobjects/products/typeface.toml (no dependencies)
-    ↓ (referenced by)
-metafields/product/key_features.toml (depends on typeface)
-    ↓ (referenced by)
-metaobjects/products/product_card.toml (depends on key_features)
+1. Validate Shopify configuration
+    ↓
+2. Create Shopify GraphQL client
+    ↓
+3. Determine output directory:
+    ├─ --output: Use explicit path
+    ├─ --name: Use .metabridge/exports/<name>/
+    └─ (default): Use .metabridge/exports/<shop-date>/
+    ↓
+4. Query metaobject definitions from Shopify
+    ↓
+5. Query metafield definitions from Shopify (all resource types)
+    ↓
+6. Convert API responses to TOML format
+    ↓
+7. Organize files by category (metaobjects) and resource (metafields)
+    ↓
+8. Calculate SHA-256 checksums
+    ↓
+9. Build dependency graph
+    ↓
+10. Update manifest.toml
+    ↓
+11. Display summary
 ```
 
-**Import Order:** typeface → key_features → product_card
+### GraphQL Queries
 
-### Missing Dependency Handling
-
-When a dependency is missing during import, the user is prompted:
-
-```
-⚠️  Missing dependency detected
-
-Definition: key_features (product metafield)
-Missing: typeface (custom metaobject)
-Reason: Not found in import set or target store
-
-Options:
-[S] Skip this definition (will not be imported)
-[P] Proceed anyway (import will likely fail)
-[A] Skip all definitions with missing dependencies
-[C] Continue all (proceed with all missing dependencies)
-[X] Abort entire import process
-
-Choice:
-```
-
-### Standard Definition Handling
-
-When a standard definition dependency is detected:
-
-**If enabled in target store:**
-- Log info message: `✓ Standard definition 'reviews.rating' found in target store`
-- Continue import
-
-**If not enabled in target store:**
-```
-⚠️  Standard definition not enabled
-
-Definition: key_features (product metafield)
-Requires: reviews.rating (standard metafield)
-Status: Not enabled in target store
-
-Options:
-[E] Enable standard definition in target store
-[S] Skip this definition
-[X] Abort import
-
-Choice:
-```
-
-If user chooses to enable, the CLI uses:
+**Metaobject Definitions:**
 ```graphql
-mutation {
-  standardMetafieldDefinitionEnable(
-    templateId: "gid://shopify/StandardMetafieldDefinitionTemplate/6"
-  ) {
-    metafieldDefinition { id }
+query {
+  metaobjectDefinitions(first: 250) {
+    edges {
+      node {
+        id
+        type
+        name
+        description
+        displayNameKey
+        access { admin storefront }
+        capabilities { publishable translatable }
+        fieldDefinitions {
+          key
+          name
+          type
+          required
+          validations { name value }
+        }
+      }
+    }
   }
 }
 ```
 
-### Failed Import Tracking
-
-The system tracks all import operations and reports at the end:
-
-```
-═══════════════════════════════════════════════
-Import Summary
-═══════════════════════════════════════════════
-
-✓ Successfully Imported: 8 definitions
-  - typeface (metaobject)
-  - hero_banner (metaobject)
-  - care_instructions (product metafield)
-  - brand_settings (shop metafield)
-  ...
-
-⚠️  Failed Imports: 2 definitions
-  - key_features (product metafield)
-    Reason: Missing metaobject 'typeface'
-  - product_card (metaobject)
-    Reason: GraphQL error - Invalid field type
-
-⏭  Skipped by User: 1 definition
-  - testimonial (metaobject)
-    Reason: User chose to skip
-
-Standard Definitions Enabled: 1
-  - reviews.rating (product metafield)
-
-═══════════════════════════════════════════════
+**Metafield Definitions:**
+```graphql
+query {
+  metafieldDefinitions(ownerType: PRODUCT, first: 250) {
+    edges {
+      node {
+        namespace
+        key
+        name
+        description
+        type
+        access { admin storefront }
+        validations { name value }
+      }
+    }
+  }
+}
 ```
 
-## Namespace Strategy
-
-### Metafield Namespaces
-
-- **User-Controlled**: Namespaces and keys are defined by the user
-- **Export Preserves**: Export captures exact namespace/key from source store
-- **Import Uses Exact Values**: Import uses namespace/key from TOML file as-is
-- **No Auto-Generation**: Tool does not modify or generate namespaces
-- **App Metafields**: App-scoped metafields (`$app:*`) are exported with their actual namespace
-
-### Common Namespace Patterns
-
-- `custom`: General custom metafields
-- `app`: App-specific metafields (scoped to the app)
-- `$app`: Shopify's reserved app namespace format
-- Standard namespaces: `descriptors`, `facts`, `reviews`, etc.
-
-## Export Workflow
-
-### Command Usage
-
-```bash
-# Export all definitions
-metabridge export --shop mystore.myshopify.com --token TOKEN --output ./shopify-definitions
-
-# Export specific metaobject type
-metabridge export --shop mystore --token TOKEN --type typeface
-
-# Export to current directory
-metabridge export
-```
-
-### Export Process
-
-1. **Authentication**: Validate shop and access token
-2. **Query Metaobjects**: Fetch all metaobject definitions via GraphQL
-   ```graphql
-   query {
-     metaobjectDefinitions(first: 250) {
-       edges {
-         node {
-           id
-           type
-           name
-           description
-           displayNameKey
-           access { admin storefront }
-           fieldDefinitions { key name type required validations }
-         }
-       }
-     }
-   }
-   ```
-3. **Query Metafields**: Fetch all metafield definitions for each resource type
-   ```graphql
-   query {
-     metafieldDefinitions(ownerType: PRODUCT, first: 250) {
-       edges {
-         node {
-           id
-           namespace
-           key
-           name
-           description
-           type
-           validations { name value }
-           access { admin storefront }
-         }
-       }
-     }
-   }
-   ```
-4. **Detect Standard Definitions**: Identify standard vs custom definitions
-5. **Analyze Dependencies**: Parse field types for references (e.g., `metaobject_reference<$app:typeface>`)
-6. **Generate TOML Files**: Convert API responses to TOML format
-7. **Organize Files**: Place in appropriate category folders
-8. **Calculate Checksums**: SHA-256 hash of file content
-9. **Update Manifest**: Add/update entries in `manifest.toml`
-10. **Track Standards**: Update `.definitions/standards/` files
-11. **Create Export Metadata**: Save timestamped export record
-
-### Auto-Manifest Update
-
-On every export, the manifest is automatically updated:
-
-- New definitions: Added to manifest
-- Changed definitions: Update checksum, version, last_modified
-- Removed definitions: Remove from manifest
-- Dependencies: Re-analyze and update dependency graph
-- Import order: Recalculate topological sort
-- Manifest version: Increment according to semantic versioning
-
-## Import Workflow
-
-### Command Usage
-
-```bash
-# Import all definitions from repository
-metabridge import --shop newstore.myshopify.com --token TOKEN --input ./shopify-definitions
-
-# Dry run (preview without changes)
-metabridge import --shop newstore --token TOKEN --dry-run
-
-# Import from current directory
-metabridge import --dry-run
-```
-
-### Import Process
-
-1. **Read Manifest**: Parse `manifest.toml` to discover all definitions
-2. **Load Definitions**: Read and parse all TOML files
-3. **Validate Checksums**: Ensure file integrity matches manifest
-4. **Build Dependency Graph**: Analyze all dependencies
-5. **Classify Dependencies**: Separate custom and standard definitions
-6. **Check Target Store**:
-   - Query existing metaobject definitions
-   - Query existing metafield definitions
-   - Check enabled standard definitions
-7. **Validate Dependencies**:
-   - Custom dependencies: Must exist in import set or target store
-   - Standard dependencies: Must be enabled in target store
-8. **Handle Missing Dependencies**: Interactive prompts for each missing dependency
-9. **Topological Sort**: Order definitions for import
-10. **Dry Run Check**: If `--dry-run`, display plan and exit
-11. **Execute Imports**:
-    - For each definition in sorted order:
-      - Check if exists in target store
-      - If exists: Prompt user (Skip/Overwrite/Compare)
-      - If new: Create via GraphQL mutation
-      - Track success/failure in memory
-12. **Enable Standard Definitions**: Prompt and enable if needed
-13. **Generate Summary**: Report successes, failures, and skips
-
-### Conflict Resolution
-
-When a definition already exists in the target store:
-
-```
-⚠️  Conflict detected
-
-Definition: typeface (metaobject)
-Status: Already exists in target store
-Local version: 1.2.0
-Remote version: 1.0.0
-
-Options:
-[S] Skip (keep existing definition)
-[O] Overwrite (replace with local definition)
-[C] Compare (show differences)
-[A] Skip all conflicts
-[X] Abort import
-
-Choice:
-```
-
-If user chooses "Compare":
-```
-Comparing: typeface (metaobject)
-
-Fields in local but not remote:
-  + font_url (url)
-
-Fields in remote but not local:
-  - font_style (single_line_text_field)
-
-Fields with different types:
-  font_weight: number_integer (local) vs single_line_text_field (remote)
-
-[S] Skip / [O] Overwrite / [B] Back to menu
-```
-
-### Dry Run Mode
-
-When `--dry-run` is specified, the tool shows what would happen without making changes:
-
-```
-═══════════════════════════════════════════════
-Dry Run Mode - No changes will be made
-═══════════════════════════════════════════════
-
-Definitions to Import: 10
-
-Import Order:
-  1. typeface (metaobject) - NEW
-  2. hero_banner (metaobject) - NEW
-  3. care_instructions (product metafield) - NEW
-  4. key_features (product metafield) - CONFLICT (exists)
-  ...
-
-Standard Definitions Required:
-  - reviews.rating (product metafield) - NOT ENABLED
-
-Warnings:
-  ⚠️  Definition 'key_features' already exists (would prompt for action)
-  ⚠️  Standard definition 'reviews.rating' not enabled (would prompt to enable)
-
-═══════════════════════════════════════════════
-```
-
-## Technical Implementation Details
+## Technical Implementation
 
 ### TOML Parsing
 
-**Library**: `@iarna/toml`
-
-**Rationale**:
-- Mature, well-maintained library
-- Full TOML spec support
-- Good TypeScript types
-- Minimal dependencies
-
-**Usage**:
-```typescript
-import TOML from '@iarna/toml';
-
-// Parse TOML file
-const definition = TOML.parse(fileContent);
-
-// Generate TOML string
-const tomlString = TOML.stringify(definition);
-```
-
-**Overhead**: ~5-10% additional code vs JSON, acceptable for Shopify alignment
+- **Library**: `@iarna/toml`
+- **Parse**: `TOML.parse(fileContent)`
+- **Stringify**: `TOML.stringify(object)`
+- **Overhead**: ~5-10% vs JSON, acceptable for Shopify alignment
 
 ### Checksum Generation
 
-**Algorithm**: SHA-256
-
-**Purpose**:
-- Detect changes to definition files
-- Validate file integrity
-- Enable efficient change detection
-
-**Implementation**:
 ```typescript
 import crypto from 'crypto';
 
@@ -670,200 +603,65 @@ function calculateChecksum(content: string): string {
 
 ### Dependency Graph
 
-**Structure**: Adjacency list representation
-
-**Algorithm**: Topological sort using depth-first search (DFS)
-
-**Implementation**:
+**Structure**: Adjacency list
 ```typescript
 interface DependencyGraph {
-  [definitionId: string]: string[];  // definitionId -> [dependencies]
-}
-
-function topologicalSort(graph: DependencyGraph): string[] {
-  // DFS-based topological sort
-  // Returns ordered list for import
+  [definitionId: string]: string[];
 }
 ```
 
-**Cycle Detection**: If circular dependency detected, report error and abort
+**Algorithm**: Topological sort using DFS
+- Detects cycles
+- Returns ordered list for import
+- Ensures dependencies are imported before dependents
 
-### GraphQL API Integration
+### GraphQL Client
 
-**Client**: `graphql-request` library
-
-**API Version**: Configurable (default: latest stable)
-
-**Rate Limiting**: Implement exponential backoff
-- Initial delay: 1 second
-- Max retries: 5
-- Backoff multiplier: 2x
-
-**Key Queries**:
-- `metaobjectDefinitions`: List all metaobject definitions
-- `metafieldDefinitions`: List metafield definitions by resource type
-- `standardMetafieldDefinitionTemplates`: List available standard metafield templates
-- `standardMetaobjectDefinitionTemplates`: List available standard metaobject templates
-
-**Key Mutations**:
-- `metaobjectDefinitionCreate`: Create new metaobject definition
-- `metafieldDefinitionCreate`: Create new metafield definition
-- `standardMetafieldDefinitionEnable`: Enable standard metafield definition
-- `standardMetaobjectDefinitionEnable`: Enable standard metaobject definition
-
-## File Structure in CLI Project
-
-```
-src/
-├── index.ts                         # CLI entry point
-├── types/
-│   └── index.ts                     # TypeScript type definitions
-├── commands/
-│   ├── export.ts                    # Export command implementation
-│   └── import.ts                    # Import command implementation
-├── lib/
-│   ├── shopify-client.ts           # GraphQL client setup
-│   ├── queries.ts                  # GraphQL queries and mutations
-│   ├── toml-parser.ts              # TOML parsing utilities
-│   ├── file-operations.ts          # File read/write operations
-│   ├── manifest.ts                 # Manifest management
-│   ├── dependency-resolver.ts      # Dependency graph and resolution
-│   ├── checksum.ts                 # Checksum calculation
-│   ├── standard-definitions.ts     # Standard definition detection
-│   └── interactive-prompts.ts      # User interaction utilities
-└── utils/
-    ├── validation.ts               # Input validation
-    └── logger.ts                   # Logging utilities
-```
+- **Library**: `graphql-request`
+- **Rate Limiting**: Exponential backoff (1s, 2s, 4s, 8s, 16s)
+- **API Version**: Configurable (default: latest stable)
 
 ## Error Handling
 
 ### Error Categories
 
-1. **Authentication Errors**: Invalid shop domain or access token
-2. **Network Errors**: API timeouts, connection failures
-3. **Rate Limit Errors**: Shopify API rate limit exceeded
-4. **Validation Errors**: Invalid TOML syntax, missing required fields
-5. **Dependency Errors**: Missing dependencies, circular dependencies
-6. **Conflict Errors**: Definition already exists in target store
-7. **Permission Errors**: Insufficient API scopes
+1. **Configuration Errors**: Missing repository, invalid config
+2. **Authentication Errors**: Invalid shop domain or access token
+3. **Network Errors**: API timeouts, connection failures
+4. **Rate Limit Errors**: Shopify API rate limit exceeded
+5. **Validation Errors**: Invalid TOML syntax, missing fields
+6. **Dependency Errors**: Missing dependencies, circular dependencies
+7. **Conflict Errors**: Definition already exists in target store
 
-### Error Handling Strategy
+### Handling Strategy
 
-- **Graceful Degradation**: Continue processing other definitions when one fails
-- **Clear Error Messages**: Provide actionable information to user
-- **Retry Logic**: Automatic retry for transient errors (network, rate limits)
-- **Rollback**: No automatic rollback (imports are tracked, user can manually address)
-
-## Future Enhancements
-
-### Phase 4: Advanced Features
-
-1. **Dependency Visualization**
-   ```bash
-   metabridge deps --graph
-   metabridge deps --show typeface
-   ```
-
-2. **Local Validation**
-   ```bash
-   metabridge validate
-   metabridge validate --definition metaobjects/products/typeface.toml
-   ```
-
-3. **Diff Command**
-   ```bash
-   metabridge diff --shop mystore.myshopify.com
-   ```
-
-4. **Sync Command**
-   ```bash
-   metabridge sync --shop mystore.myshopify.com
-   # Two-way sync between local repo and remote store
-   ```
-
-5. **Watch Mode**
-   ```bash
-   metabridge watch --shop mystore.myshopify.com
-   # Auto-export on changes in remote store
-   ```
-
-## Version Control Integration
-
-### Git Workflow
-
-1. **Initial Export**: Export definitions from source store
-2. **Commit**: Commit to version control
-   ```bash
-   git add .
-   git commit -m "feat: initial export of metaobject definitions"
-   ```
-3. **Make Changes**: Edit TOML files locally
-4. **Validate**: Run validation command
-5. **Import**: Import to target store(s)
-6. **Commit**: Commit successful imports
-   ```bash
-   git add .
-   git commit -m "feat: add typeface metaobject definition"
-   ```
-
-### Best Practices
-
-- **Meaningful Commits**: Commit each logical change separately
-- **Descriptive Messages**: Explain what changed and why
-- **Branch Strategy**: Use feature branches for new definitions
-- **Pull Requests**: Review changes before merging
-- **Tags**: Tag versions for releases/deployments
+- **Graceful Degradation**: Continue processing other definitions
+- **Clear Messages**: Actionable error information
+- **Retry Logic**: Automatic retry for transient errors
+- **User Prompts**: Interactive resolution for conflicts
 
 ## Security Considerations
 
-1. **Access Tokens**: Never commit tokens to version control
+1. **Access Tokens**: Never commit to version control
    - Use `.env` files (gitignored)
    - Use environment variables
-   - Use secure secret management
+2. **Git Credentials**: Support `GITHUB_TOKEN` for private repos
+3. **API Scopes**: Require minimal scopes
+4. **Input Validation**: Sanitize all user inputs
 
-2. **API Scopes**: Require minimal scopes
-   - `read_metaobjects` for export
-   - `write_metaobjects` for import
+## Future Enhancements
 
-3. **Validation**: Sanitize all user inputs
-   - Validate shop domains
-   - Validate file paths
-   - Validate TOML syntax
-
-4. **Rate Limiting**: Respect Shopify's rate limits to avoid account issues
-
-## Testing Strategy
-
-1. **Unit Tests**: Test individual utilities (TOML parsing, checksums, dependency graph)
-2. **Integration Tests**: Test GraphQL queries with mocked responses
-3. **End-to-End Tests**: Test full export/import workflow with test store
-4. **Edge Cases**:
-   - Empty definitions
-   - Circular dependencies
-   - Missing dependencies
-   - Malformed TOML
-   - Network failures
-   - Rate limiting
-
-## Glossary
-
-- **Metaobject**: Custom content type in Shopify with defined fields
-- **Metafield**: Additional data field attached to Shopify resources
-- **Definition**: Schema describing a metaobject or metafield structure
-- **Standard Definition**: Pre-configured definition provided by Shopify
-- **Custom Definition**: User-created definition
-- **Dependency**: Reference from one definition to another
-- **Manifest**: Central file tracking all definitions and dependencies
-- **Checksum**: Hash value for detecting file changes
-- **Topological Sort**: Ordering algorithm for dependency resolution
+1. **Standard Definition Enablement**: Auto-enable Shopify standard definitions
+2. **Dependency Visualization**: `metabridge deps --graph`
+3. **Local Validation**: `metabridge validate`
+4. **Watch Mode**: Auto-export on remote changes
+5. **Performance**: Parallel GraphQL queries
+6. **Testing**: Comprehensive test coverage
 
 ## References
 
 - [Shopify Custom Data Documentation](https://shopify.dev/docs/apps/build/custom-data)
-- [Metafield Definitions](https://shopify.dev/docs/apps/build/custom-data/metafields/definitions)
 - [Metaobject Definitions](https://shopify.dev/docs/apps/build/custom-data/metaobjects)
-- [Standard Metafield Definitions](https://shopify.dev/docs/apps/build/custom-data/metafields/list-of-standard-definitions)
-- [Standard Metaobject Definitions](https://shopify.dev/docs/apps/build/custom-data/metaobjects/list-of-standard-definitions)
+- [Metafield Definitions](https://shopify.dev/docs/apps/build/custom-data/metafields/definitions)
 - [TOML Specification](https://toml.io/)
 - [Shopify GraphQL Admin API](https://shopify.dev/docs/api/admin-graphql)

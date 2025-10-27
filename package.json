@@ -38,11 +38,15 @@
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "graphql": "^16.9.0",
-    "graphql-request": "^7.1.2"
+    "graphql-request": "^7.1.2",
+    "inquirer": "^12.10.0",
+    "minimatch": "^10.0.3",
+    "simple-git": "^3.28.0"
   },
   "devDependencies": {
+    "@types/inquirer": "^9.0.9",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.18.12",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
     "eslint": "^9.17.0",

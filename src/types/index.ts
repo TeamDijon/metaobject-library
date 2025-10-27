@@ -251,6 +251,7 @@ export interface ExportOptions {
   shop?: string;
   token?: string;
   output?: string;
+  name?: string;
   type?: string;
   category?: string;
 }
@@ -262,6 +263,20 @@ export interface ImportOptions {
   shop?: string;
   token?: string;
   input?: string;
+  from?: string;
+  type?: string[];
+  category?: string[];
+  pattern?: string;
+  excludeType?: string[];
+  excludeCategory?: string[];
+  all?: boolean;
+  withDependencies?: boolean;
+  dependenciesOnly?: boolean;
+  noDependencies?: boolean;
+  interactive?: boolean;
+  noInteractive?: boolean;
+  onConflict?: 'prompt' | 'skip' | 'overwrite' | 'abort';
+  to?: string;
   dryRun?: boolean;
 }
 
@@ -306,4 +321,52 @@ export interface ImportSummary {
   skipped: number;
   results: ImportResult[];
   standard_definitions_enabled: number;
+}
+
+/**
+ * Store alias configuration
+ */
+export interface StoreAlias {
+  shop: string;
+  description?: string;
+}
+
+/**
+ * Repository configuration
+ */
+export interface RepositoryConfig {
+  url: string;
+  branch?: string;
+  cache_ttl?: number;
+}
+
+/**
+ * Metabridge configuration structure
+ */
+export interface MetabridgeConfig {
+  repository?: RepositoryConfig;
+  stores?: Record<string, StoreAlias>;
+  defaults?: {
+    import_source?: string;
+    conflict_resolution?: 'prompt' | 'skip' | 'overwrite' | 'abort';
+  };
+}
+
+/**
+ * Source type enum
+ */
+export enum SourceType {
+  REPOSITORY = 'repository',
+  LOCAL_EXPORT = 'local_export',
+  FILESYSTEM_PATH = 'filesystem_path',
+}
+
+/**
+ * Resolved source information
+ */
+export interface ResolvedSource {
+  type: SourceType;
+  path: string;
+  displayName: string;
+  cacheAge?: number;
 }

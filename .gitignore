@@ -31,8 +31,8 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Metaobject exports (optional - uncomment if you don't want to commit exports)
-# metaobjects/
+# Metabridge local data (cache and exports)
+.metabridge/
 
 # TypeScript
 *.tsbuildinfo

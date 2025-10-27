@@ -6,27 +6,28 @@ import type {
   ShopifyConfig,
   MetaobjectDefinition,
   MetafieldDefinition,
-} from '../types';
-import { createShopifyClient, validateConfig } from '../lib/shopify-client';
+} from '../types/index.js';
+import { createShopifyClient, validateConfig } from '../lib/shopify-client.js';
 import {
   METAOBJECT_DEFINITIONS_QUERY,
   METAFIELD_DEFINITIONS_QUERY,
   METAFIELD_OWNER_TYPES,
   type MetafieldOwnerType,
-} from '../lib/queries';
+} from '../lib/queries.js';
 import {
   writeMetaobjectDefinition,
   writeMetafieldDefinition,
   ensureDirectory,
-} from '../lib/file-operations';
+} from '../lib/file-operations.js';
 import {
   loadOrCreateManifest,
   updateManifest,
   saveManifest,
   getRelativePath,
-} from '../lib/manifest';
-import { extractMetaobjectReferences } from '../lib/standard-definitions';
-import type { MetaobjectTomlDefinition, MetafieldTomlDefinition } from '../types';
+} from '../lib/manifest.js';
+import { extractMetaobjectReferences } from '../lib/standard-definitions.js';
+import * as configManager from '../lib/config-manager.js';
+import type { MetaobjectTomlDefinition, MetafieldTomlDefinition } from '../types/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -35,7 +36,8 @@ export const exportCommand = new Command('export')
   .description('Export metaobject and metafield definitions from a Shopify store')
   .option('-s, --shop <shop>', 'Shopify shop domain (e.g., mystore.myshopify.com)')
   .option('-t, --token <token>', 'Shopify Admin API access token')
-  .option('-o, --output <path>', 'Output directory for TOML files', './shopify-definitions')
+  .option('-o, --output <path>', 'Output directory for TOML files (overrides --name)')
+  .option('-n, --name <name>', 'Export name (saves to .metabridge/exports/<name>)')
   .option('--type <type>', 'Export only a specific metaobject type')
   .option('--category <category>', 'Default category for organization', 'general')
   .action(async (options: ExportOptions) => {
@@ -58,9 +60,26 @@ async function runExport(options: ExportOptions): Promise<void> {
   const client = createShopifyClient(config);
 
   // 3. Setup output directory
-  const outputDir = path.resolve(options.output || './shopify-definitions');
-  await ensureDirectory(outputDir);
+  let outputDir: string;
 
+  if (options.output) {
+    // Explicit output path provided
+    outputDir = path.resolve(options.output);
+  } else if (options.name) {
+    // Named export - save to .metabridge/exports/<name>
+    configManager.initialize(); // Ensure .metabridge exists
+    outputDir = configManager.getExportPath(options.name);
+  } else {
+    // Default: use timestamp-based export in .metabridge/exports/
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const shopName = config.shop.replace(/\.myshopify\.com$/, '').replace(/[^a-z0-9-]/gi, '-');
+    const defaultName = `${shopName}-${timestamp}`;
+    configManager.initialize(); // Ensure .metabridge exists
+    outputDir = configManager.getExportPath(defaultName);
+    console.log(`📝 Using default export name: ${defaultName}\n`);
+  }
+
+  await ensureDirectory(outputDir);
   console.log(`📁 Output directory: ${outputDir}\n`);
 
   // 4. Export metaobjects
