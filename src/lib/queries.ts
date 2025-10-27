@@ -274,4 +274,4 @@ export const METAFIELD_OWNER_TYPES = [
   'LOCATION',
 ] as const;
 
-export type MetafieldOwnerType = typeof METAFIELD_OWNER_TYPES[number];
+export type MetafieldOwnerType = (typeof METAFIELD_OWNER_TYPES)[number];

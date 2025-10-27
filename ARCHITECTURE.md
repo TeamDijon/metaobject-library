@@ -156,7 +156,7 @@ The manifest provides a centralized view of all definitions and their relationsh
 version = "1.0.0"                    # Manifest version (semantic versioning)
 schema_version = "1"                 # Schema version for compatibility
 last_updated = "2025-10-21T10:30:00Z"
-tool_version = "0.1.0"               # Version of metaobject-library tool
+tool_version = "0.1.0"               # Version of shopify-metabridge tool
 
 # Metaobject definitions registry
 [[metaobjects]]
@@ -446,13 +446,13 @@ Standard Definitions Enabled: 1
 
 ```bash
 # Export all definitions
-metaobject export --shop mystore.myshopify.com --token TOKEN --output ./shopify-definitions
+metabridge export --shop mystore.myshopify.com --token TOKEN --output ./shopify-definitions
 
 # Export specific metaobject type
-metaobject export --shop mystore --token TOKEN --type typeface
+metabridge export --shop mystore --token TOKEN --type typeface
 
 # Export to current directory
-metaobject export
+metabridge export
 ```
 
 ### Export Process
@@ -521,13 +521,13 @@ On every export, the manifest is automatically updated:
 
 ```bash
 # Import all definitions from repository
-metaobject import --shop newstore.myshopify.com --token TOKEN --input ./shopify-definitions
+metabridge import --shop newstore.myshopify.com --token TOKEN --input ./shopify-definitions
 
 # Dry run (preview without changes)
-metaobject import --shop newstore --token TOKEN --dry-run
+metabridge import --shop newstore --token TOKEN --dry-run
 
 # Import from current directory
-metaobject import --dry-run
+metabridge import --dry-run
 ```
 
 ### Import Process
@@ -761,30 +761,30 @@ src/
 
 1. **Dependency Visualization**
    ```bash
-   metaobject deps --graph
-   metaobject deps --show typeface
+   metabridge deps --graph
+   metabridge deps --show typeface
    ```
 
 2. **Local Validation**
    ```bash
-   metaobject validate
-   metaobject validate --definition metaobjects/products/typeface.toml
+   metabridge validate
+   metabridge validate --definition metaobjects/products/typeface.toml
    ```
 
 3. **Diff Command**
    ```bash
-   metaobject diff --shop mystore.myshopify.com
+   metabridge diff --shop mystore.myshopify.com
    ```
 
 4. **Sync Command**
    ```bash
-   metaobject sync --shop mystore.myshopify.com
+   metabridge sync --shop mystore.myshopify.com
    # Two-way sync between local repo and remote store
    ```
 
 5. **Watch Mode**
    ```bash
-   metaobject watch --shop mystore.myshopify.com
+   metabridge watch --shop mystore.myshopify.com
    # Auto-export on changes in remote store
    ```
 

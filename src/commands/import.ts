@@ -23,8 +23,16 @@ import {
   readMetafieldDefinition,
   fileExists,
 } from '../lib/file-operations';
-import { buildImportOrder, findMissingDependencies, validateDependencyGraph } from '../lib/dependency-resolver';
-import { classifyDependency, parseMetafieldId, formatMetafieldId } from '../lib/standard-definitions';
+import {
+  buildImportOrder,
+  findMissingDependencies,
+  validateDependencyGraph,
+} from '../lib/dependency-resolver';
+import {
+  classifyDependency,
+  parseMetafieldId,
+  formatMetafieldId,
+} from '../lib/standard-definitions';
 import type { Manifest } from '../types';
 
 // Load environment variables
@@ -205,7 +213,9 @@ async function showDryRunSummary(
   }
 
   if (existingMetaobjects.size > 0) {
-    console.log(`\n⚠️  ${existingMetaobjects.size} definition(s) already exist (would prompt for action)`);
+    console.log(
+      `\n⚠️  ${existingMetaobjects.size} definition(s) already exist (would prompt for action)`
+    );
   }
 
   console.log('\n═══════════════════════════════════════════════');

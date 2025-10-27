@@ -16,7 +16,9 @@ export function parseTOML<T = unknown>(content: string): T {
   try {
     return TOML.parse(content) as T;
   } catch (error) {
-    throw new Error(`Failed to parse TOML: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to parse TOML: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -29,7 +31,9 @@ export function stringifyTOML(data: unknown): string {
   try {
     return TOML.stringify(data as TOML.JsonMap);
   } catch (error) {
-    throw new Error(`Failed to stringify TOML: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to stringify TOML: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 

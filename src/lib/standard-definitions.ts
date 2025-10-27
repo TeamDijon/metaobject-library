@@ -34,7 +34,7 @@ export function isStandardMetafieldNamespace(namespace: string): boolean {
  * @returns True if standard definition
  */
 export function isStandardMetaobjectType(type: string): boolean {
-  return STANDARD_METAOBJECT_TYPES.includes(type as typeof STANDARD_METAOBJECT_TYPES[number]);
+  return STANDARD_METAOBJECT_TYPES.includes(type as (typeof STANDARD_METAOBJECT_TYPES)[number]);
 }
 
 /**

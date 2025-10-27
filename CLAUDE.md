@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Node.js CLI tool for migrating Shopify metaobject definitions between stores using the Shopify GraphQL Admin API. The tool enables exporting metaobject definitions from a source store to JSON files and importing them into target stores, eliminating manual recreation of metaobject structures.
+This is **Shopify Metabridge**, a Node.js CLI tool for bridging and syncing Shopify metaobject definitions, metafield definitions, and entries between stores using the Shopify GraphQL Admin API. The tool enables exporting definitions from a source store to TOML files and importing them into target stores, eliminating manual recreation of metaobject structures.
 
-**Key Use Case**: Streamline theme development workflow by maintaining version-controlled metaobject definitions that can be quickly deployed to new Shopify stores.
+**Key Use Case**: Streamline theme development workflow by maintaining version-controlled definitions that can be quickly deployed to new Shopify stores. The CLI command is `metabridge`, while the package name is `shopify-metabridge`.
 
 ## Development Commands
 
@@ -47,21 +47,21 @@ npm run format:check
 
 ```bash
 # Export metaobject definitions from a store
-metaobject export --shop mystore.myshopify.com --token YOUR_TOKEN --output ./metaobjects
+metabridge export --shop mystore.myshopify.com --token YOUR_TOKEN --output ./metaobjects
 
 # Export a specific metaobject type
-metaobject export --shop mystore --token YOUR_TOKEN --type typeface
+metabridge export --shop mystore --token YOUR_TOKEN --type typeface
 
 # Import metaobject definitions to a store
-metaobject import --shop newstore.myshopify.com --token YOUR_TOKEN --input ./metaobjects
+metabridge import --shop newstore.myshopify.com --token YOUR_TOKEN --input ./metaobjects
 
 # Dry run (preview without making changes)
-metaobject import --shop newstore --token YOUR_TOKEN --dry-run
+metabridge import --shop newstore --token YOUR_TOKEN --dry-run
 
 # Using environment variables (recommended)
 # Set SHOPIFY_SHOP and SHOPIFY_ACCESS_TOKEN in .env
-metaobject export
-metaobject import --dry-run
+metabridge export
+metabridge import --dry-run
 ```
 
 ## High-Level Architecture
@@ -94,13 +94,13 @@ Commands are implemented as separate modules in `src/commands/` and registered i
 - TypeScript types defined in `src/types/index.ts`
 - Never commit access tokens or store credentials to version control (`.env` is in `.gitignore`)
 
-### JSON Schema Handling
-- Exported JSON should preserve complete metaobject definition structure:
+### TOML Schema Handling
+- Exported TOML files preserve complete metaobject definition structure:
   - Definition type and name
   - Field definitions (type, key, name, validations)
   - Display configuration
   - Access settings (storefront, admin)
-- Validate JSON structure before import to catch issues early
+- Validate TOML structure before import to catch issues early
 - Consider schema versioning if Shopify's metaobject structure evolves
 
 ### Error Handling
@@ -114,7 +114,7 @@ Commands are implemented as separate modules in `src/commands/` and registered i
 - Mock Shopify API responses for unit tests to avoid hitting real stores
 - Integration tests should use a dedicated test store
 - Test edge cases: empty definitions, maximum field counts, special characters in type names
-- Validate JSON export/import round-trip accuracy
+- Validate TOML export/import round-trip accuracy
 
 ## Shopify-Specific Context
 

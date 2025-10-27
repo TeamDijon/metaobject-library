@@ -1,10 +1,10 @@
 {
-  "name": "@mx/metaobject-library",
+  "name": "shopify-metabridge",
   "version": "0.1.0",
-  "description": "CLI tool for migrating Shopify metaobject definitions between stores",
+  "description": "CLI tool for syncing Shopify metaobject definitions, metafield definitions, and entries between stores",
   "main": "dist/index.js",
   "bin": {
-    "metaobject": "dist/index.js"
+    "metabridge": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -20,8 +20,12 @@
   "keywords": [
     "shopify",
     "metaobject",
+    "metafield",
+    "metabridge",
     "cli",
     "migration",
+    "sync",
+    "bridge",
     "admin-api"
   ],
   "author": "",

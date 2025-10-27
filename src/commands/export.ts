@@ -1,7 +1,12 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 import path from 'path';
-import type { ExportOptions, ShopifyConfig, MetaobjectDefinition, MetafieldDefinition } from '../types';
+import type {
+  ExportOptions,
+  ShopifyConfig,
+  MetaobjectDefinition,
+  MetafieldDefinition,
+} from '../types';
 import { createShopifyClient, validateConfig } from '../lib/shopify-client';
 import {
   METAOBJECT_DEFINITIONS_QUERY,
@@ -14,7 +19,12 @@ import {
   writeMetafieldDefinition,
   ensureDirectory,
 } from '../lib/file-operations';
-import { loadOrCreateManifest, updateManifest, saveManifest, getRelativePath } from '../lib/manifest';
+import {
+  loadOrCreateManifest,
+  updateManifest,
+  saveManifest,
+  getRelativePath,
+} from '../lib/manifest';
 import { extractMetaobjectReferences } from '../lib/standard-definitions';
 import type { MetaobjectTomlDefinition, MetafieldTomlDefinition } from '../types';
 
@@ -95,7 +105,9 @@ async function exportMetaobjects(
   client: any,
   outputDir: string,
   options: ExportOptions
-): Promise<Map<string, { definition: MetaobjectTomlDefinition; filePath: string; category: string }>> {
+): Promise<
+  Map<string, { definition: MetaobjectTomlDefinition; filePath: string; category: string }>
+> {
   const metaobjectsDir = path.join(outputDir, 'metaobjects');
   const category = options.category || 'general';
   const categoryDir = path.join(metaobjectsDir, category);
@@ -155,7 +167,9 @@ async function exportMetafields(
   client: any,
   outputDir: string,
   options: ExportOptions
-): Promise<Map<string, { definition: MetafieldTomlDefinition; filePath: string; category: string }>> {
+): Promise<
+  Map<string, { definition: MetafieldTomlDefinition; filePath: string; category: string }>
+> {
   const metafieldsDir = path.join(outputDir, 'metafields');
   const category = options.category || 'general';
   const metafields = new Map();
@@ -184,7 +198,9 @@ async function exportMetafieldsForResource(
   metafieldsDir: string,
   category: string,
   outputDir: string
-): Promise<Map<string, { definition: MetafieldTomlDefinition; filePath: string; category: string }>> {
+): Promise<
+  Map<string, { definition: MetafieldTomlDefinition; filePath: string; category: string }>
+> {
   const metafields = new Map();
   const resourceName = ownerType.toLowerCase().replace('productvariant', 'variant');
   const resourceDir = path.join(metafieldsDir, resourceName);
@@ -236,10 +252,7 @@ async function exportMetafieldsForResource(
   return metafields;
 }
 
-function convertMetaobjectToToml(
-  apiDefinition: any,
-  category: string
-): MetaobjectTomlDefinition {
+function convertMetaobjectToToml(apiDefinition: any, category: string): MetaobjectTomlDefinition {
   const tomlDef: MetaobjectTomlDefinition = {
     definition: {
       type: apiDefinition.type,

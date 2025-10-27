@@ -1,5 +1,11 @@
 import path from 'path';
-import { readManifest, writeManifest, fileExists, calculateFileChecksum, getFileModificationTime } from './file-operations';
+import {
+  readManifest,
+  writeManifest,
+  fileExists,
+  calculateFileChecksum,
+  getFileModificationTime,
+} from './file-operations';
 import { buildDependencyGraph, buildImportOrder, getAllDependencies } from './dependency-resolver';
 import type {
   Manifest,
@@ -48,7 +54,9 @@ export async function loadOrCreateManifest(manifestPath: string): Promise<Manife
   try {
     return await readManifest(manifestPath);
   } catch (error) {
-    console.warn(`Failed to load manifest, creating new one: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `Failed to load manifest, creating new one: ${error instanceof Error ? error.message : String(error)}`
+    );
     return createEmptyManifest();
   }
 }
@@ -128,8 +136,14 @@ export async function createMetafieldEntry(
  */
 export async function updateManifest(
   manifest: Manifest,
-  metaobjects: Map<string, { definition: MetaobjectTomlDefinition; filePath: string; category: string }>,
-  metafields: Map<string, { definition: MetafieldTomlDefinition; filePath: string; category: string }>
+  metaobjects: Map<
+    string,
+    { definition: MetaobjectTomlDefinition; filePath: string; category: string }
+  >,
+  metafields: Map<
+    string,
+    { definition: MetafieldTomlDefinition; filePath: string; category: string }
+  >
 ): Promise<Manifest> {
   const newManifest: Manifest = {
     manifest: {
@@ -158,7 +172,15 @@ export async function updateManifest(
   for (const [id, { definition, filePath, category }] of metafields) {
     const checksum = await calculateFileChecksum(filePath);
     const { resource, namespace, key } = definition.definition;
-    const entry = await createMetafieldEntry(resource, namespace, key, definition, filePath, checksum, category);
+    const entry = await createMetafieldEntry(
+      resource,
+      namespace,
+      key,
+      definition,
+      filePath,
+      checksum,
+      category
+    );
     newManifest.metafields.push(entry);
   }
 

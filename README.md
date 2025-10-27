@@ -1,6 +1,6 @@
-# Metaobject Library
+# Shopify Metabridge
 
-A powerful CLI tool for managing Shopify metaobject and metafield definitions using TOML files. Export definitions from one store and import them into others, with automatic dependency resolution and version control integration.
+A powerful CLI tool for bridging and syncing Shopify metaobject definitions, metafield definitions, and entries across stores using TOML files. Export definitions from one store and import them into others, with automatic dependency resolution and version control integration.
 
 ## Features
 
@@ -35,13 +35,13 @@ cp .env.example .env
 
 **Export from source store:**
 ```bash
-npm run dev -- export --output ./shopify-definitions
+metabridge export --output ./shopify-definitions
 ```
 
 **Import to target store:**
 ```bash
-npm run dev -- import --shop newstore.myshopify.com --token YOUR_TOKEN --dry-run
-npm run dev -- import --shop newstore.myshopify.com --token YOUR_TOKEN
+metabridge import --shop newstore.myshopify.com --token YOUR_TOKEN --dry-run
+metabridge import --shop newstore.myshopify.com --token YOUR_TOKEN
 ```
 
 ## Usage Guide
@@ -52,19 +52,19 @@ Export metaobject and metafield definitions from a Shopify store:
 
 ```bash
 # Export all definitions to default directory (./shopify-definitions)
-metaobject export
+metabridge export
 
 # Export to custom directory
-metaobject export --output /path/to/my-definitions-repo
+metabridge export --output /path/to/my-definitions-repo
 
 # Export specific metaobject type
-metaobject export --type typeface
+metabridge export --type typeface
 
 # Export with custom category
-metaobject export --category products
+metabridge export --category products
 
 # Use CLI flags instead of .env
-metaobject export --shop mystore --token shpat_xxxxx
+metabridge export --shop mystore --token shpat_xxxxx
 ```
 
 **Output Structure:**
@@ -90,16 +90,16 @@ Import definitions from a TOML repository to a Shopify store:
 
 ```bash
 # Dry run - preview changes without applying
-metaobject import --dry-run
+metabridge import --dry-run
 
 # Import all definitions
-metaobject import
+metabridge import
 
 # Import from custom directory
-metaobject import --input /path/to/my-definitions-repo
+metabridge import --input /path/to/my-definitions-repo
 
 # Import to different store
-metaobject import --shop targetstore --token shpat_yyyyy
+metabridge import --shop targetstore --token shpat_yyyyy
 ```
 
 **Features:**
@@ -114,7 +114,7 @@ metaobject import --shop targetstore --token shpat_yyyyy
 ```bash
 SHOPIFY_SHOP=mystore.myshopify.com
 SHOPIFY_ACCESS_TOKEN=shpat_xxxxx
-SHOPIFY_API_VERSION=2025-01  # Optional, defaults to 2024-10
+SHOPIFY_API_VERSION=2025-01  # Optional, defaults to 2025-01
 ```
 
 ## TOML File Format
@@ -264,7 +264,7 @@ To use this tool, create a custom app in your Shopify admin with these scopes:
 
 2. **Export from your source store:**
    ```bash
-   metaobject export --output .
+   metabridge export --output .
    ```
 
 3. **Commit to version control:**
@@ -275,8 +275,8 @@ To use this tool, create a custom app in your Shopify admin with these scopes:
 
 4. **Import to target stores:**
    ```bash
-   metaobject import --shop newstore --token TOKEN --dry-run
-   metaobject import --shop newstore --token TOKEN
+   metabridge import --shop newstore --token TOKEN --dry-run
+   metabridge import --shop newstore --token TOKEN
    ```
 
 ### Version Control Integration
@@ -332,10 +332,10 @@ Solution: Review and fix circular references in your definitions
 ### 🚧 Future Enhancements
 
 - Standard definition enablement during import
-- Dependency visualization (`metaobject deps --graph`)
-- Local validation (`metaobject validate`)
-- Diff command (`metaobject diff`)
-- Two-way sync (`metaobject sync`)
+- Dependency visualization (`metabridge deps --graph`)
+- Local validation (`metabridge validate`)
+- Diff command (`metabridge diff`)
+- Two-way sync (`metabridge sync`)
 - Watch mode for auto-export
 - Comprehensive test coverage
 - CI/CD integration examples

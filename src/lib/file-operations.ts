@@ -9,11 +9,7 @@ import {
   parseManifest,
   generateDefinitionHeader,
 } from './toml-parser';
-import type {
-  MetaobjectTomlDefinition,
-  MetafieldTomlDefinition,
-  Manifest,
-} from '../types';
+import type { MetaobjectTomlDefinition, MetafieldTomlDefinition, Manifest } from '../types';
 
 /**
  * Ensure a directory exists, creating it if necessary
@@ -104,7 +100,9 @@ export async function writeTomlFile(
  * @param filePath - Path to metaobject TOML file
  * @returns Parsed metaobject definition
  */
-export async function readMetaobjectDefinition(filePath: string): Promise<MetaobjectTomlDefinition> {
+export async function readMetaobjectDefinition(
+  filePath: string
+): Promise<MetaobjectTomlDefinition> {
   const content = await readFile(filePath);
   return parseMetaobjectToml(content);
 }
